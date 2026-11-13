@@ -1,0 +1,98 @@
+{
+  "name": "power-scan",
+  "productName": "Power Scan",
+  "version": "1.0.0",
+  "description": "Kernel-level virus scan, speed test and driver checker for Windows and Linux",
+  "main": "src/main.js",
+  "author": {
+    "name": "Power Scan contributors",
+    "email": "35036419+iveezor@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "node tools/make-icons.js",
+    "check": "node tools/check.js",
+    "pack:win": "node tools/pack.js win",
+    "pack:linux": "node tools/pack.js linux",
+    "pack": "node tools/pack.js win linux",
+    "dist:win": "node tools/pack.js win && electron-builder --win nsis --prepackaged \"dist/Power Scan-win32-x64\"",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:deb": "node tools/pack.js linux && node tools/make-deb.js"
+  },
+  "dependencies": {
+    "@fontsource/barlow-semi-condensed": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.10.0",
+    "electron-builder": "26.18.1"
+  },
+  "homepage": "https://github.com/iveezor/power-scan",
+  "build": {
+    "appId": "com.powerscan.app",
+    "productName": "Power Scan",
+    "copyright": "Copyright © 2026 Power Scan contributors",
+    "directories": {
+      "output": "release"
+    },
+    "asar": false,
+    "files": [
+      "src/**",
+      "assets/**",
+      "package.json",
+      "node_modules/@fontsource/*/package.json",
+      "node_modules/@fontsource/*/files/*-latin-*-normal.woff2"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Power Scan",
+      "artifactName": "Power-Scan-Setup-${version}.${ext}",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "System",
+      "executableName": "power-scan",
+      "artifactName": "power-scan_${version}_${arch}.${ext}",
+      "maintainer": "Power Scan <35036419+iveezor@users.noreply.github.com>",
+      "synopsis": "Virus scan, speed test and driver checker"
+    },
+    "deb": {
+      "depends": [
+        "policykit-1 | pkexec"
+      ],
+      "recommends": [
+        "clamav",
+        "clamav-daemon",
+        "rkhunter",
+        "fwupd",
+        "iw",
+        "pciutils"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iveezor/power-scan.git"
+  }
+}
