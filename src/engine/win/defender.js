@@ -75,8 +75,10 @@ async function scanPath(target, { remediate = false, signal } = {}) {
   if (!remediate) args.push('-DisableRemediation');
   const r = await run(mp, args, { signal });
   const threats = parseThreats(r.stdout);
-  const ok = r.code === 0 || r.code === 2 || threats.length > 0;
-  return { code: r.code, threats, error: ok || r.aborted ? null : (r.stdout || r.stderr || '').trim().split(/\r?\n/).pop() };
+  // Exit code 2 means both "threats listed" and "scan failed", so failures are read from Defender's own text.
+  const hr = (r.stdout.match(/Failed with hr\s*=\s*(0x[0-9a-f]+)/i) || [])[1];
+  const failed = !threats.length && !r.aborted && (hr || (r.code !== 0 && r.code !== 2));
+  return { code: r.code, threats, hr: hr || null, error: failed ? (hr ? `Defender error ${hr}` : (r.stdout || r.stderr || '').trim().split(/\r?\n/).pop()) : null };
 }
 
 async function cancelScans() {

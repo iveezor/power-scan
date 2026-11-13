@@ -259,8 +259,10 @@
     else if (sc.finishedAt) cap = `Finished ${clockStr(sc.finishedAt)} · ${fmtN(sc.checked)} items · ${dur(sc.finishedAt - sc.startedAt)}`;
     scanCaption.textContent = cap;
 
-    const notes = (sc.status === 'idle' || sc.status === 'stopped') ? (S.info && S.info.notes) || [] : (sc.notes || []).map((n) => n.text);
-    scanNotes.innerHTML = sc.status === 'running' ? '' : notes.map((t) => `<div class="note">${IC.warn}<span>${esc(t)}</span></div>`).join('');
+    const notes = (sc.status === 'idle' || sc.status === 'stopped') ? ((S.info && S.info.notes) || []).map((text) => ({ tone: 'warn', text })) : sc.notes || [];
+    scanNotes.innerHTML = sc.status === 'running' ? '' : notes.map((n) => (n.tone === 'info'
+      ? `<div class="note info">${IC.infoc}<span>${esc(n.text)}</span></div>`
+      : `<div class="note">${IC.warn}<span>${esc(n.text)}</span></div>`)).join('');
     scanFeed.hidden = sc.status !== 'running';
     scanResults.hidden = !(sc.status === 'threats' || sc.status === 'resolved' || (sc.status === 'stopped' && list.length));
     scanGlance.hidden = !(sc.status === 'idle' || sc.status === 'stopped' || sc.status === 'clean' || sc.status === 'resolved');

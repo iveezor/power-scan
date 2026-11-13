@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const ps = require('./ps');
 const defender = require('./defender');
+const filescan = require('./filescan');
 const { exists } = require('../util');
 
 const base = (p) => path.basename(String(p || ''));
@@ -209,117 +210,20 @@ async function processes(ctx) {
   }, { signal: ctx.signal, timeout: 15 * 60000 });
 }
 
-/* ---------- pass 5: every file, scanned by Microsoft Defender ---------- */
-const SPLIT = new Set(['users']);
-const SKIP_ROOT_FILES = new Set(['pagefile.sys', 'hiberfil.sys', 'swapfile.sys', 'dumpstack.log', 'dumpstack.log.tmp']);
-
-async function listDir(dir) {
-  try { return await fsp.readdir(dir, { withFileTypes: true }); } catch (_) { return []; }
-}
-
-/** Splits each drive into scan units: top folders, with user profiles split one level further. */
-async function buildUnits(roots) {
-  const units = [];
-  for (const root of roots) {
-    for (const e of await listDir(root)) {
-      const p = path.join(root, e.name);
-      const lower = e.name.toLowerCase();
-      if (e.isDirectory()) {
-        if (SPLIT.has(lower)) {
-          for (const prof of await listDir(p)) {
-            if (!prof.isDirectory()) continue;
-            const pp = path.join(p, prof.name);
-            const kids = await listDir(pp);
-            if (!kids.length) { units.push(pp); continue; }
-            for (const k of kids) {
-              if (k.isSymbolicLink()) continue;
-              const kp = path.join(pp, k.name);
-              if (k.isDirectory() && k.name.toLowerCase() === 'appdata') {
-                for (const a of await listDir(kp)) if (a.isDirectory()) units.push(path.join(kp, a.name));
-              } else if (k.isDirectory() || k.isFile()) units.push(kp);
-            }
-          }
-        } else units.push(p);
-      } else if (e.isFile() && !SKIP_ROOT_FILES.has(lower)) units.push(p);
-    }
-  }
-  return units;
-}
-
-/** Counts files under a unit and keeps a random sample of paths for the live feed. */
-async function countUnit(unit, sample, signal, max = 800) {
-  let st;
-  try { st = await fsp.lstat(unit); } catch (_) { return 0; }
-  if (st.isFile()) { sample.push(unit); return 1; }
-  let n = 0, steps = 0;
-  const stack = [unit];
-  while (stack.length && !signal.aborted) {
-    const dir = stack.pop();
-    for (const e of await listDir(dir)) {
-      if (e.isSymbolicLink()) continue;
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) stack.push(p);
-      else if (e.isFile()) {
-        n++;
-        if (sample.length < max) sample.push(p);
-        else { const j = Math.floor(Math.random() * n); if (j < max) sample[j] = p; }
-      }
-    }
-    if (++steps % 200 === 0) await new Promise((r) => setImmediate(r));
-  }
-  return n;
-}
-
+/* ---------- pass 5: every file, scanned by Microsoft Defender (several scanners in parallel) ---------- */
 async function files(ctx) {
   const st = ctx.status || (await defender.status());
   const d = st.defender || {};
-  if (!defender.mpcmdrun() || d.mode !== 'Normal' || !d.av) {
-    ctx.note('warn', 'Microsoft Defender is not the active antivirus on this PC, so the file pass was skipped. The antivirus you use still protects your files.');
+  if (!defender.mpcmdrun() || d.mode !== "Normal" || !d.av) {
+    ctx.note("warn", "Microsoft Defender is not the active antivirus on this PC, so the file pass was skipped. The antivirus you use still protects your files.");
     return;
   }
   if (d.sigAge >= 1) {
-    ctx.item({ file: 'Updating Microsoft Defender signatures', sub: '' });
+    ctx.item({ file: "Updating Microsoft Defender signatures", sub: "" });
     await defender.updateSignatures(ctx.signal);
   }
   const roots = (st.drives && st.drives.length ? st.drives : ['C:']).map((x) => x.replace(/\\?$/, '\\'));
-  const units = await buildUnits(roots);
-  const counts = new Array(units.length).fill(null);
-  const samples = units.map(() => []);
-  let counted = false;
-  const counter = (async () => {
-    for (let i = 0; i < units.length && !ctx.signal.aborted; i++) counts[i] = await countUnit(units[i], samples[i], ctx.signal);
-    counted = true;
-  })();
-
-  let doneFiles = 0;
-  let rate = 400;
-  for (let i = 0; i < units.length && !ctx.signal.aborted; i++) {
-    const unit = units[i];
-    const t0 = Date.now();
-    let k = 0;
-    const tick = setInterval(() => {
-      const est = counts[i] != null ? counts[i] : Math.max(samples[i].length, 1);
-      const frac = Math.min(0.95, (((Date.now() - t0) / 1000) * rate) / Math.max(est, 1));
-      const s = samples[i];
-      if (s.length) { const p = s[k++ % s.length]; ctx.item({ dir: dirOf(p), file: base(p), sub: '' }); }
-      else ctx.item({ dir: dirOf(unit), file: base(unit), sub: 'scanning' });
-      const total = counted ? counts.reduce((a, b) => a + (b || 0), 0) : 0;
-      const checked = doneFiles + Math.round(est * frac);
-      ctx.progress(total ? Math.min(0.99, checked / total) : Math.min(0.99, (i + frac) / units.length), checked);
-    }, 90);
-    const r = await defender.scanPath(unit, { remediate: false, signal: ctx.signal });
-    clearInterval(tick);
-    if (ctx.signal.aborted) break;
-    const cnt = counts[i] != null ? counts[i] : 0;
-    doneFiles += cnt;
-    const secs = (Date.now() - t0) / 1000;
-    if (cnt > 300 && secs > 1) rate = rate * 0.4 + (cnt / secs) * 0.6;
-    for (const t of r.threats) ctx.finding(threatFinding(t));
-    if (r.error && !r.threats.length) ctx.note('warn', `Defender could not scan ${unit}: ${r.error}`);
-  }
-  await Promise.race([counter, new Promise((r) => setTimeout(r, 50))]);
-  if (ctx.signal.aborted) { await defender.cancelScans(); return; }
-  ctx.progress(1, doneFiles);
+  await filescan.run(ctx, roots, threatFinding);
 }
 
 function threatFinding(t) {
@@ -402,4 +306,4 @@ function quarantineUserFile(file) {
   }
 }
 
-module.exports = { kernel, boot, startup, processes, files, remove, buildUnits, countUnit };
+module.exports = { kernel, boot, startup, processes, files, remove };

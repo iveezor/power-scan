@@ -1,7 +1,7 @@
 {
   "name": "power-scan",
   "productName": "Power Scan",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Kernel-level virus scan, speed test and driver checker for Windows and Linux",
   "main": "src/main.js",
   "author": {
@@ -17,8 +17,8 @@
     "pack:win": "node tools/pack.js win",
     "pack:linux": "node tools/pack.js linux",
     "pack": "node tools/pack.js win linux",
-    "dist:win": "node tools/pack.js win && electron-builder --win nsis --prepackaged \"dist/Power Scan-win32-x64\"",
-    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:win": "node tools/pack.js win && electron-builder --win nsis --prepackaged \"dist/Power Scan-win32-x64\" --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb --publish never",
     "dist:deb": "node tools/pack.js linux && node tools/make-deb.js"
   },
   "dependencies": {

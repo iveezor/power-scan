@@ -28,7 +28,7 @@ Five passes, starting at the kernel:
 | Boot | Secure Boot, Memory integrity (HVCI), test-signing, signature checks, early-launch driver | Secure Boot (`mokutil`), lockdown, module signature enforcement, `/etc/ld.so.preload` |
 | Startup | Run keys, startup folders, scheduled tasks, services, Winlogon, AppInit_DLLs, IFEO | systemd units, autostart entries, cron, shell profiles |
 | Programs | Unsigned programs running from user folders, programs whose file is gone | Deleted or `/tmp` binaries, processes hidden from `ps` |
-| Files | Microsoft Defender scans every drive in report-only mode (`MpCmdRun -DisableRemediation`) | ClamAV (`clamscan -r /`) plus rkhunter if installed |
+| Files | Counts every file first (a few seconds), splits the drives into even pieces, then runs several Microsoft Defender report-only scans in parallel (`MpCmdRun -DisableRemediation`; half the processor cores, 2 to 8) | ClamAV (`clamscan -r /`) plus rkhunter if installed |
 
 Findings wait for **Remove** (or **Disable**, **Remove from startup**, **End and scan**) or **Keep**. Every action shows a confirmation first. Windows removals use Defender's quarantine; Linux removals move files to a quarantine folder with permissions stripped.
 

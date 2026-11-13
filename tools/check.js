@@ -56,9 +56,25 @@ async function main() {
         const r = await P.defender.scanPath(path.join(__dirname, '..', 'assets'), { remediate: false });
         console.log(`  exit ${r.code}, threats ${r.threats.length}, error ${r.error}`);
       });
-      const units = await P.scan.buildUnits(['C:\\']);
-      console.log(`  file pass would scan ${units.length} units, e.g. ${units.slice(0, 6).join(' | ')}`);
     }
+  }
+
+  if (which === 'files') {
+    console.log('== full file pass (report-only Defender scans, timed)');
+    const t0 = Date.now();
+    let lastLog = 0, lastLine = '', checked = 0, frac = 0;
+    const ctx = {
+      signal: new AbortController().signal,
+      item: (it) => { lastLine = `${it.dir || ''}${it.file}${it.sub ? ' · ' + it.sub : ''}`; },
+      progress: (f, c) => {
+        frac = f; if (typeof c === 'number') checked = c;
+        if (Date.now() - lastLog > 30000) { lastLog = Date.now(); console.log(`  ${((Date.now() - t0) / 60000).toFixed(1)} min: ${(f * 100).toFixed(0)}%, ${checked.toLocaleString('en-US')} files · ${lastLine.slice(0, 90)}`); }
+      },
+      count: () => {}, finding: (f) => console.log('  FINDING:', f.name, f.path), note: (tone, text) => console.log('  note:', text),
+    };
+    ctx.item = ((orig) => (it) => { orig(it); if (/pieces/.test(it.file)) console.log(`  ${((Date.now() - t0) / 1000).toFixed(1)} s: ${it.file} · ${it.sub}`); })(ctx.item);
+    await P.scan.files(ctx);
+    console.log(`  finished in ${((Date.now() - t0) / 60000).toFixed(1)} min, ${checked.toLocaleString('en-US')} files, ${(checked / ((Date.now() - t0) / 1000)).toFixed(0)} files/s`);
   }
 
   if (which === 'drivers' || which === 'all') {
